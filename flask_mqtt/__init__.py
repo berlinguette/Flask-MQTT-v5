@@ -4,6 +4,7 @@
 :license: MIT, see license file or https://opensource.org/licenses/MIT
 
 """
+
 import sys
 import ssl
 import logging
@@ -14,6 +15,7 @@ from typing import Dict, Any, Callable, Tuple, Optional, List
 # noinspection PyUnresolvedReferences
 from paho.mqtt.client import (
     Client,
+    Properties,
     MQTT_ERR_SUCCESS,
     MQTT_ERR_ACL_DENIED,
     MQTT_ERR_AGAIN,
@@ -39,6 +41,8 @@ from paho.mqtt.client import (
     MQTTv311,
     MQTTv31,
 )
+from paho.mqtt.reasoncodes import ReasonCode
+from paho.mqtt.enums import CallbackAPIVersion, MQTTErrorCode
 
 # define some alias for python2 compatibility
 if sys.version_info[0] >= 3:
@@ -64,14 +68,18 @@ class Mqtt:
     """
 
     def __init__(
-        self, app: Flask = None, connect_async: bool = False, mqtt_logging: bool = False, config_prefix: str = "MQTT"
+        self,
+        app: Flask = None,
+        connect_async: bool = False,
+        mqtt_logging: bool = False,
+        config_prefix: str = "MQTT",
     ) -> None:
         self._connect_async: bool = connect_async
         self._connect_handler: Optional[Callable] = None
         self._disconnect_handler: Optional[Callable] = None
 
         self.app = app
-        self.client = Client()
+        self.client = Client(CallbackAPIVersion.VERSION2)
         self.connected = False
         self.topics: Dict[str, TopicQos] = {}
 
@@ -104,15 +112,15 @@ class Mqtt:
         if app is not None:
             self.init_app(app, self.config_prefix)
 
-    def init_app(self, app: Flask, config_prefix : str = "MQTT") -> None:
+    def init_app(self, app: Flask, config_prefix: str = "MQTT") -> None:
         """Init the Flask-MQTT addon."""
-        
+
         if self.app is None:
             self.app = app
-        
+
         if config_prefix + "_CLIENT_ID" in app.config:
             self.client_id = app.config["MQTT_CLIENT_ID"]
-            
+
         if isinstance(self.client_id, unicode):
             self.client._client_id = self.client_id.encode("utf-8")
         else:
@@ -121,14 +129,18 @@ class Mqtt:
         if config_prefix + "_CLEAN_SESSION" in app.config:
             self.clean_session = app.config[config_prefix + "_CLEAN_SESSION"]
 
-        self.client._transport = app.config.get(config_prefix + "_TRANSPORT", "tcp").lower()
-        self.client._protocol = app.config.get(config_prefix + "_PROTOCOL_VERSION", MQTTv311)
+        self.client._transport = app.config.get(
+            config_prefix + "_TRANSPORT", "tcp"
+        ).lower()
+        self.client._protocol = app.config.get(
+            config_prefix + "_PROTOCOL_VERSION", MQTTv311
+        )
         self.client._clean_session = self.clean_session
         self.client.on_connect = self._handle_connect
         self.client.on_disconnect = self._handle_disconnect
 
         if config_prefix + "_USERNAME" in app.config:
-            self.username = app.config[ config_prefix + "_USERNAME"]
+            self.username = app.config[config_prefix + "_USERNAME"]
 
         if config_prefix + "_PASSWORD" in app.config:
             self.password = app.config[config_prefix + "_PASSWORD"]
@@ -155,7 +167,7 @@ class Mqtt:
             self.last_will_qos = app.config[config_prefix + "_LAST_WILL_QOS"]
 
         if config_prefix + "_LAST_WILL_RETAIN" in app.config:
-            self.last_will_retain = app.config[ config_prefix + "_LAST_WILL_RETAIN"]
+            self.last_will_retain = app.config[config_prefix + "_LAST_WILL_RETAIN"]
 
         if self.tls_enabled:
             if config_prefix + "_TLS_CA_CERTS" in app.config:
@@ -173,8 +185,12 @@ class Mqtt:
             if config_prefix + "_TLS_INSECURE" in app.config:
                 self.tls_insecure = app.config[config_prefix + "_TLS_INSECURE"]
 
-            self.tls_cert_reqs = app.config.get(config_prefix + "_TLS_CERT_REQS", ssl.CERT_REQUIRED)
-            self.tls_version = app.config.get(config_prefix + "_TLS_VERSION", ssl.PROTOCOL_TLSv1)
+            self.tls_cert_reqs = app.config.get(
+                config_prefix + "_TLS_CERT_REQS", ssl.CERT_REQUIRED
+            )
+            self.tls_version = app.config.get(
+                config_prefix + "_TLS_VERSION", ssl.PROTOCOL_TLSv1
+            )
 
         # set last will message
         if self.last_will_topic is not None:
@@ -233,19 +249,31 @@ class Mqtt:
         logger.debug("Disconnected from Broker")
 
     def _handle_connect(
-        self, client: Client, userdata: Any, flags: Dict[str, Any], rc: int
+        self,
+        client: Client,
+        userdata: Any,
+        flags: Dict[str, Any],
+        reason_code: ReasonCode,
+        properties: Properties | None,
     ) -> None:
-        if rc == MQTT_ERR_SUCCESS:
+        if reason_code == MQTT_ERR_SUCCESS:
             self.connected = True
             for key, item in self.topics.items():
                 self.client.subscribe(topic=item.topic, qos=item.qos)
         if self._connect_handler is not None:
-            self._connect_handler(client, userdata, flags, rc)
+            self._connect_handler(client, userdata, flags, reason_code, properties)
 
-    def _handle_disconnect(self, client: Client, userdata: Any, rc: int) -> None:
+    def _handle_disconnect(
+        self,
+        client: Client,
+        userdata: Any,
+        flags: Dict[str, Any],
+        reason_code: ReasonCode,
+        properties: Properties,
+    ) -> None:
         self.connected = False
         if self._disconnect_handler is not None:
-            self._disconnect_handler()
+            self._disconnect_handler(client, userdata, flags, reason_code, properties)
 
     def on_topic(self, topic: str) -> Callable:
         """Decorator.
@@ -279,7 +307,7 @@ class Mqtt:
 
         return decorator
 
-    def subscribe(self, topic, qos: int = 0) -> Tuple[int, int]:
+    def subscribe(self, topic, qos: int = 0) -> Tuple[MQTTErrorCode, int]:
         """
         Subscribe to a certain topic.
 
@@ -328,7 +356,7 @@ class Mqtt:
 
         return result, mid
 
-    def unsubscribe(self, topic: str) -> Optional[Tuple[int, int]]:
+    def unsubscribe(self, topic: str) -> Optional[Tuple[MQTTErrorCode, int]]:
         """
         Unsubscribe from a single topic.
 
@@ -365,25 +393,26 @@ class Mqtt:
     def unsubscribe_all(self) -> None:
         """
         Unsubscribe from all topics.
-        
-        Returns True if all topics are unsubscribed from self.topics, otherwise False 
-        
+
+        Returns True if all topics are unsubscribed from self.topics, otherwise False
+
         """
         topics = list(self.topics.keys())
         for topic in topics:
             self.unsubscribe(topic)
-        
+
         if not len(self.topics):
             return True
         return False
-        
+
     def publish(
         self,
         topic: str,
         payload: Optional[bytes] = None,
         qos: int = 0,
         retain: bool = False,
-    ) -> Tuple[int, int]:
+        properties: Properties | None = None,
+    ) -> Tuple[MQTTErrorCode|int, MQTTErrorCode|int]:
         """
         Send a message to the broker.
 
@@ -404,7 +433,7 @@ class Mqtt:
                   ID for the publish request.
 
         """
-        result, mid = self.client.publish(topic, payload, qos, retain)
+        result, mid = self.client.publish(topic, payload, qos, retain, properties)
         if result == MQTT_ERR_SUCCESS:
             logger.debug("Published topic {0}: {1}".format(topic, payload))
         else:
@@ -490,9 +519,9 @@ class Mqtt:
         **Usage:**::
 
             @mqtt.on_subscribe()
-            def handle_subscribe(client, userdata, mid, granted_qos):
-                print('Subscription id {} granted with qos {}.'
-                      .format(mid, granted_qos))
+            def handle_subscribe(client, userdata, mid, reason_code_list, properties):
+                print('Subscription id {} granted with reason codes {}.'
+                      .format(mid, [r.getName() for r in reason_code_list]))
         """
 
         def decorator(handler: Callable) -> Callable:
