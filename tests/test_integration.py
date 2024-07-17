@@ -39,11 +39,11 @@ class FlaskMQTTTestCase(unittest.TestCase):
         self.unsubscribe_handled = False
 
         @self.mqtt.on_subscribe()
-        def handle_subscribe(client, userdata, mid_, granted_qos):
+        def handle_subscribe(client, userdata, mid_, reason_code_list, properties):
             self.subscribe_handled = True
 
         @self.mqtt.on_unsubscribe()
-        def handle_unsubscribe(client, userdata, mid_):
+        def handle_unsubscribe(client, userdata, mid_, reason_code_list, properties):
             self.unsubscribe_handled = True
 
         ret, mid = self.mqtt.subscribe('home/test')
@@ -108,7 +108,7 @@ class FlaskMQTTTestCase(unittest.TestCase):
             self.handled_message = True
 
         @self.mqtt.on_publish()
-        def handle_publish(client, userdata, mid):
+        def handle_publish(client, userdata, mid, reason_code, properties):
             self.handled_publish = True
 
         self.mqtt.subscribe('home/test')
