@@ -1,4 +1,7 @@
-# Flask-MQTT
+# Flask-MQTT-v5
+
+Fork of [stlehmann/Flask-MQTT](https://github.com/stlehmann/Flask-MQTT) with v5 support.
+Handlers have been migrated to `paho-mqtt` v2 syntax.
 
 Flask Extension for the [MQTT protocol][1]. Basically it is a thin wrapper
 around [paho-mqtt][0] and aims to simplify MQTT integration in Flask. MQTT is a
@@ -72,6 +75,7 @@ app.config['MQTT_BROKER_PORT'] = 1883
 app.config['MQTT_USERNAME'] = 'user'
 app.config['MQTT_PASSWORD'] = 'secret'
 app.config['MQTT_REFRESH_TIME'] = 1.0  # refresh time in seconds
+app.config['MQTT_PROTOCOL_VERSION'] = 5 # 3 for v3.1.1, 4 for v3.11, 5 for v5
 mqtt = Mqtt(app)
 
 @app.route('/')
@@ -88,7 +92,7 @@ an `on_connect()` callback function.
 
 ```python
 @mqtt.on_connect()
-def handle_connect(client, userdata, flags, rc):
+def handle_connect(client, userdata, flags, reason_code, properties):
     mqtt.subscribe('home/mytopic')
 ```
 

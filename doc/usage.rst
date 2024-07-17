@@ -69,7 +69,7 @@ the subscription until the client is connected to the broker. Use the
 ::
 
     @mqtt.on_connect()
-    def handle_connect(client, userdata, flags, rc):
+    def handle_connect(client, userdata, flags, reason_code, properties):
         mqtt.subscribe('home/mytopic')
 
 To handle the subscribed messages you can define a handling function by
@@ -220,7 +220,9 @@ messages and publish messages.
 
 
     if __name__ == '__main__':
-        socketio.run(app, host='0.0.0.0', port=5000, use_reloader=False, debug=True)
+        # important: Do not use reloader because this will create two Flask instances.
+        # Flask-MQTT only supports running with one instance
+        socketio.run(app, host='0.0.0.0', port=5000, use_reloader=False, debug=False)
 
 
 .. _Flask application object: http://flask.pocoo.org/docs/0.12/api/#application-object

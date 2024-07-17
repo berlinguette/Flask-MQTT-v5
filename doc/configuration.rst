@@ -101,5 +101,5 @@ Configuration Keys
                                use raw TCP.
 
 ``MQTT_PROTOCOL_VERSION``      The version of the MQTT protocol to use. Can be
-                               either ``MQTTv31`` or ``MQTTv311`` (default).
+                               either ``MQTTv5``, ``MQTTv31``, or ``MQTTv311`` (default).
 ============================== ================================================
